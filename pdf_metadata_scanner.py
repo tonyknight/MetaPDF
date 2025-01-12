@@ -113,6 +113,7 @@ def create_error_metadata(filepath, error_msg):
 def scan_pdfs(root_folder):
     """Recursively scan folder for PDFs and extract metadata."""
     pdf_data = []
+    error_data = []
     total_pdfs = 0
     error_counts = {}
     object_error_files = []
@@ -139,6 +140,12 @@ def scan_pdfs(root_folder):
                             encrypted_files.append(filepath)
                         if "Corrupted PDF" in error:
                             corrupted_files.append(filepath)
+                        # Add to error data
+                        error_data.append({
+                            'filename': metadata['filename'],
+                            'filepath': metadata['filepath'],
+                            'error_type': error
+                        })
 
     # Print statistics
     print(f"\nPDF Processing Statistics:")
@@ -151,37 +158,33 @@ def scan_pdfs(root_folder):
         for error_type, count in error_counts.items():
             print(f"- {error_type}: {count} files")
     
-    if encrypted_files:
-        print("\nEncrypted PDFs:")
-        for file in encrypted_files:
-            print(f"- {file}")
-    
-    if corrupted_files:
-        print("\nCorrupted PDFs (EOF marker not found):")
-        for file in corrupted_files:
-            print(f"- {file}")
-            
-    if object_error_files:
-        print("\nFiles with Object errors:")
-        for file in object_error_files:
-            print(f"- {file}")
-    
-    return pdf_data
+    return pdf_data, error_data
 
 def main():
     # Replace with your PDF folder path
     pdf_folder = "/Users/knight/Sync/Documents/PDFs"
     
+    # Get current datetime for filenames
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
     # Scan PDFs and extract metadata
     print(f"Starting PDF scan in: {pdf_folder}")
-    pdf_data = scan_pdfs(pdf_folder)
+    pdf_data, error_data = scan_pdfs(pdf_folder)
     
-    # Create DataFrame and save to CSV
+    # Create DataFrames and save to CSV files
     if pdf_data:
+        # Save main metadata
         df = pd.DataFrame(pdf_data)
-        output_file = "pdf_metadata.csv"
+        output_file = f"({current_time}) Metadata2CSV.csv"
         df.to_csv(output_file, index=False)
         print(f"\nMetadata saved to {output_file}")
+        
+        # Save error data if any errors occurred
+        if error_data:
+            error_df = pd.DataFrame(error_data)
+            error_output_file = f"({current_time}) Metadata2CSV Errors.csv"
+            error_df.to_csv(error_output_file, index=False)
+            print(f"Error data saved to {error_output_file}")
     else:
         print("No PDF files found")
 
