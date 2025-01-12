@@ -10,44 +10,35 @@ def extract_pdf_metadata(filepath):
         
         # Handle encrypted PDFs
         if reader.is_encrypted:
-            return {
-                'filename': os.path.basename(filepath),
-                'filepath': filepath,
-                'has_title': False,
-                'title_if_exists': None,
-                'has_date': False,
-                'date_if_exists': None,
-                'raw_date_string': None,
-                'error': 'Encrypted PDF'
-            }
+            return create_error_metadata(filepath, 'Encrypted PDF')
         
         # Safely get metadata
         try:
             info = reader.metadata or {}
         except Exception as e:
-            return {
-                'filename': os.path.basename(filepath),
-                'filepath': filepath,
-                'has_title': False,
-                'title_if_exists': None,
-                'has_date': False,
-                'date_if_exists': None,
-                'raw_date_string': None,
-                'error': f'Metadata error: {str(e)}'
-            }
+            return create_error_metadata(filepath, f'Metadata error: {str(e)}')
         
-        filename = os.path.basename(filepath)
+        filename = sanitize_field(os.path.basename(filepath))
+        filepath = sanitize_field(filepath)
         
-        # Safely extract title
-        try:
-            pdf_title = info.get('/Title', None)
-            if hasattr(pdf_title, 'get_object'):
-                try:
-                    pdf_title = pdf_title.get_object()
-                except Exception:
-                    pdf_title = None
-        except Exception:
-            pdf_title = None
+        # Safely extract all metadata fields
+        metadata = {}
+        for field, key in [
+            ('title', '/Title'),
+            ('author', '/Author'),
+            ('subject', '/Subject'),
+            ('tags', '/Keywords'),
+        ]:
+            try:
+                value = info.get(key, None)
+                if hasattr(value, 'get_object'):
+                    try:
+                        value = value.get_object()
+                    except Exception:
+                        value = None
+                metadata[field] = sanitize_field(value) if value else None
+            except Exception:
+                metadata[field] = None
         
         # Safely extract date
         pdf_date = None
@@ -71,11 +62,17 @@ def extract_pdf_metadata(filepath):
         return {
             'filename': filename,
             'filepath': filepath,
-            'has_title': pdf_title is not None,
-            'title_if_exists': pdf_title,
+            'has_title': metadata['title'] is not None,
+            'title': metadata['title'],
+            'has_author': metadata['author'] is not None,
+            'author': metadata['author'],
+            'has_subject': metadata['subject'] is not None,
+            'subject': metadata['subject'],
+            'has_tags': metadata['tags'] is not None,
+            'tags': metadata['tags'],
             'has_date': pdf_date is not None,
-            'date_if_exists': pdf_date,
-            'raw_date_string': raw_date,
+            'date': pdf_date,
+            'raw_date_string': sanitize_field(raw_date),
             'error': None
         }
     except Exception as e:
@@ -86,16 +83,32 @@ def extract_pdf_metadata(filepath):
             error_msg = "Corrupted PDF (EOF marker not found)"
             
         print(f"Error processing {filepath}: {error_msg}")
-        return {
-            'filename': os.path.basename(filepath),
-            'filepath': filepath,
-            'has_title': False,
-            'title_if_exists': None,
-            'has_date': False,
-            'date_if_exists': None,
-            'raw_date_string': None,
-            'error': error_msg
-        }
+        return create_error_metadata(filepath, error_msg)
+
+def sanitize_field(value):
+    """Replace commas with semicolons in a field value."""
+    if value is None:
+        return None
+    return str(value).replace(',', ';')
+
+def create_error_metadata(filepath, error_msg):
+    """Create metadata dictionary for error cases."""
+    return {
+        'filename': sanitize_field(os.path.basename(filepath)),
+        'filepath': sanitize_field(filepath),
+        'has_title': False,
+        'title': None,
+        'has_author': False,
+        'author': None,
+        'has_subject': False,
+        'subject': None,
+        'has_tags': False,
+        'tags': None,
+        'has_date': False,
+        'date': None,
+        'raw_date_string': None,
+        'error': error_msg
+    }
 
 def scan_pdfs(root_folder):
     """Recursively scan folder for PDFs and extract metadata."""
