@@ -160,16 +160,14 @@ def scan_pdfs(root_folder):
     
     return pdf_data, error_data
 
-def main():
-    # Replace with your PDF folder path
-    pdf_folder = "/Users/knight/Sync/Documents/PDFs"
-    
+def metadata_to_csv():
+    """Export PDF metadata to CSV files."""
     # Get current datetime for filenames
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     # Scan PDFs and extract metadata
-    print(f"Starting PDF scan in: {pdf_folder}")
-    pdf_data, error_data = scan_pdfs(pdf_folder)
+    print(f"Starting PDF scan in: {PDF_FOLDER}")
+    pdf_data, error_data = scan_pdfs(PDF_FOLDER)
     
     # Create DataFrames and save to CSV files
     if pdf_data:
@@ -187,6 +185,75 @@ def main():
             print(f"Error data saved to {error_output_file}")
     else:
         print("No PDF files found")
+
+def clean_dates_dryrun():
+    """Preview date cleaning operations without making changes."""
+    print("Clean Dates Dryrun - Not implemented yet")
+
+def clean_dates():
+    """Clean up dates in PDF filenames."""
+    print("Clean Dates - Not implemented yet")
+
+def preview_scan():
+    """Preview metadata changes before writing."""
+    print("Preview Scan - Not implemented yet")
+
+def metadata_write_dryrun():
+    """Preview metadata write operations without making changes."""
+    print("Metadata Write Dryrun - Not implemented yet")
+
+def metadata_write():
+    """Write metadata to PDF files."""
+    print("Metadata Write - Not implemented yet")
+
+def display_menu():
+    """Display the main menu."""
+    print("\nPDF Metadata Tools")
+    print("=================")
+    print("1. Metadata2CSV")
+    print("2. Clean Dates Dryrun")
+    print("3. Clean Dates")
+    print("4. Preview Scan")
+    print("5. Metadata Write Dryrun")
+    print("6. Metadata Write")
+    print("Q. Quit Script")
+    return input("\nSelect an option: ").strip().upper()
+
+def main():
+    # Configuration
+    global PDF_FOLDER
+    PDF_FOLDER = "/Users/knight/Sync/Documents/PDFs"
+    
+    while True:
+        try:
+            choice = display_menu()
+            
+            if choice == 'Q':
+                print("Exiting script...")
+                break
+            
+            # Process menu choice
+            if choice == '1':
+                metadata_to_csv()
+            elif choice == '2':
+                clean_dates_dryrun()
+            elif choice == '3':
+                clean_dates()
+            elif choice == '4':
+                preview_scan()
+            elif choice == '5':
+                metadata_write_dryrun()
+            elif choice == '6':
+                metadata_write()
+            else:
+                print("Invalid option. Please try again.")
+            
+            # Pause before showing menu again
+            input("\nPress Enter to continue...")
+            
+        except Exception as e:
+            print(f"\nAn error occurred: {str(e)}")
+            input("\nPress Enter to continue...")
 
 if __name__ == "__main__":
     main() 
