@@ -553,14 +553,23 @@ def find_embedded_dates(filename, existing_date=None):
         match = re.match(r'\(\d{4}(?:-\d{2}){0,2}\)\s*(.+)', filename)
         working_name = match.group(1) if match else filename
     
+    # Store the original year prefix if it exists
+    year_prefix_match = re.match(r'\((\d{4})\)\s*(.+)', filename)
+    year_prefix = f"({year_prefix_match.group(1)})" if year_prefix_match else None
+    
     # Patterns for finding embedded dates
     date_patterns = [
+        # Spaced date after prefix (1991 - 01 - 23)
+        (r'(\d{4})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})\s*-\s*',  # 1991 - 01 - 23 -
+         lambda m: (f"{m.group(1)}-{m.group(2).zfill(2)}-{m.group(3).zfill(2)}", 
+                   [f"{m.group(0)}"])),  # Include the trailing dash and space
+        
         # Expense report timestamp pattern
         (r'\s*\(\d{4}-\d{2}\d{2}_\d+\)',                    # (2010-0805_162655)
          lambda m: (f"{m.group(0)[2:6]}-{m.group(0)[7:9]}-{m.group(0)[9:11]}", 
-                   [m.group(0)])),  # Include the space before parentheses in removal
+                   [m.group(0), year_prefix] if year_prefix else [m.group(0)])),
         
-        # Spaced date format
+        # Other spaced date format
         (r'(?:^|\s+)(\d{4})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})(?:\s+|$)',  # 1991 - 01 - 23
          lambda m: (f"{m.group(1)}-{m.group(2).zfill(2)}-{m.group(3).zfill(2)}", [m.group(0)])),
     ]
@@ -591,6 +600,9 @@ def clean_trailing_separators(filename):
     """Clean up trailing spaces and separators in filename."""
     # Split filename and extension
     name, ext = os.path.splitext(filename)
+    
+    # Clean up multiple spaces
+    name = re.sub(r'\s+', ' ', name)
     
     # Clean up trailing spaces and separators
     name = name.rstrip()
