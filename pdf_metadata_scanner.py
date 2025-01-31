@@ -763,11 +763,24 @@ def metadata_write():
                 
                 if filename_metadata['title']:
                     print("Processing title/subject fields...")
+                    # Don't remove square brackets and their content for title/subject
                     clean_title = clean_title_string(filename_metadata['title'])
                     if clean_title:
                         # Always write cleaned title if available
-                        metadata_to_write['/Title'] = clean_title
-                        metadata_to_write['/Subject'] = clean_title
+                        # Remove the date prefix but preserve bracketed content
+                        date_match = re.match(r'\(\d{4}(?:-\d{2}){0,2}\)\s*(.+)', filename)
+                        if date_match:
+                            title_text = date_match.group(1)
+                        else:
+                            title_text = filename_metadata['title']
+                            
+                        # Clean up spaces and remove .pdf extension
+                        title_text = re.sub(r'\.pdf$', '', title_text, flags=re.IGNORECASE)
+                        title_text = re.sub(r'\s+', ' ', title_text)
+                        title_text = title_text.strip()
+                        
+                        metadata_to_write['/Title'] = title_text
+                        metadata_to_write['/Subject'] = title_text
                         stats['title_written'] += 1
                         stats['subject_written'] += 1
                         metadata_written_flags['title'] = True
@@ -889,13 +902,14 @@ def display_menu():
     print("5. Metadata Write Dryrun")
     print("6. Metadata Write")
     print("7. Clean Metadata Fields")
+    print("8. Import Author Metadata")
     print("Q. Quit Script")
     return input("\nSelect an option: ").strip().upper()
 
 def main():
     # Configuration
     global PDF_FOLDER
-    PDF_FOLDER = "/path/to/your/PDFs/"
+    PDF_FOLDER = "/Users/knight/Desktop/PDFs"
     
     while True:
         try:
@@ -920,6 +934,8 @@ def main():
                 metadata_write()
             elif choice == '7':
                 clean_metadata_fields()
+            elif choice == '8':
+                import_author_metadata()
             else:
                 print("Invalid option. Please try again.")
             
@@ -1294,6 +1310,161 @@ def clean_metadata_fields():
     print(f"Files cleaned: {stats['files_cleaned']}")
     print(f"Title fields cleaned: {stats['title_cleaned']}")
     print(f"Subject fields cleaned: {stats['subject_cleaned']}")
+    print(f"Errors encountered: {len(errors)}")
+
+def import_author_metadata():
+    """Import author metadata from CSV and apply to PDFs and filenames."""
+    print("Starting Author Metadata Import...")
+    
+    # Get CSV file from user
+    csv_path = "/Users/knight/Desktop/Corrections.csv"
+    if not os.path.exists(csv_path):
+        print("Error: CSV file not found")
+        return
+    
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    metadata_written = []
+    files_renamed = []
+    errors = []
+    stats = {
+        'total_files': 0,
+        'metadata_written': 0,
+        'files_renamed': 0,
+        'encrypted_files': 0
+    }
+    
+    try:
+        # Read CSV file
+        print(f"Reading CSV file: {csv_path}")
+        df = pd.read_csv(csv_path)
+        print(f"CSV loaded successfully with {len(df)} entries")
+        print("\nCSV columns found:", df.columns.tolist())
+        
+        # Debug: Print first few rows
+        print("\nFirst few entries:")
+        print(df.head())
+        
+        for index, row in df.iterrows():
+            stats['total_files'] += 1
+            try:
+                filepath = str(row['filepath'])
+                filename = str(row['filename'])
+                author = row.get('author')
+                
+                print(f"\nProcessing entry {index + 1}/{len(df)}:")
+                print(f"Filepath: {filepath}")
+                print(f"Filename: {filename}")
+                print(f"Author: {author}")
+                
+                if not author or pd.isna(author):
+                    print("Skipping - No author data")
+                    continue
+                
+                if not os.path.exists(filepath):
+                    print(f"File not found: {filepath}")
+                    raise FileNotFoundError(f"File not found: {filepath}")
+                
+                print("Attempting to read PDF...")
+                reader = PdfReader(filepath)
+                
+                if reader.is_encrypted:
+                    print("File is encrypted - skipping")
+                    stats['encrypted_files'] += 1
+                    continue
+                
+                print("Creating PDF writer...")
+                writer = PdfWriter()
+                
+                print("Copying pages...")
+                for page_num, page in enumerate(reader.pages):
+                    print(f"Copying page {page_num + 1}")
+                    writer.add_page(page)
+                
+                print("Writing author metadata...")
+                writer.add_metadata({'/Author': author.strip()})
+                
+                temp_filepath = filepath + '.tmp'
+                print(f"Writing to temporary file: {temp_filepath}")
+                
+                with open(temp_filepath, 'wb') as output_file:
+                    writer.write(output_file)
+                
+                print("Replacing original file...")
+                os.replace(temp_filepath, filepath)
+                stats['metadata_written'] += 1
+                
+                print("Recording successful metadata write...")
+                metadata_written.append({
+                    'filepath': filepath,
+                    'filename': filename,
+                    'author': author
+                })
+                
+                print("Updating filename...")
+                name, ext = os.path.splitext(filename)
+                new_filename = f"{name} - ({author.strip()}){ext}"
+                new_filepath = os.path.join(os.path.dirname(filepath), new_filename)
+                
+                print(f"New filepath will be: {new_filepath}")
+                
+                if not os.path.exists(new_filepath) or filepath.lower() == new_filepath.lower():
+                    print("Renaming file...")
+                    os.rename(filepath, new_filepath)
+                    stats['files_renamed'] += 1
+                    files_renamed.append({
+                        'original_filepath': filepath,
+                        'new_filepath': new_filepath,
+                        'original_filename': filename,
+                        'new_filename': new_filename
+                    })
+                    print("File renamed successfully")
+                else:
+                    print("Cannot rename - file already exists")
+                    raise FileExistsError(f"Cannot rename: {new_filename} already exists")
+                
+            except Exception as e:
+                error_msg = f"Error processing entry {index + 1}: {str(e)}"
+                errors.append({
+                    'filepath': filepath,
+                    'filename': filename,
+                    'error': error_msg
+                })
+                print(f"Error: {error_msg}")
+    
+    except Exception as e:
+        print(f"Critical error: {str(e)}")
+        if 'df' in locals():
+            print("\nDataFrame info:")
+            print(df.info())
+        return
+    
+    print("\nWriting result files...")
+    
+    # Save results to CSV files
+    if metadata_written:
+        df = pd.DataFrame(metadata_written)
+        output_file = f"({current_time}) Author Import Metadata.csv"
+        df.to_csv(output_file, index=False)
+        print(f"Metadata write results saved to: {output_file}")
+    
+    if files_renamed:
+        df = pd.DataFrame(files_renamed)
+        rename_file = f"({current_time}) Author Import Renames.csv"
+        df.to_csv(rename_file, index=False)
+        print(f"Rename results saved to: {rename_file}")
+    
+    if errors:
+        error_df = pd.DataFrame(errors)
+        error_file = f"({current_time}) Author Import Errors.csv"
+        error_df.to_csv(error_file, index=False)
+        print(f"Errors saved to: {error_file}")
+    
+    # Print summary
+    print(f"\nAuthor Import Summary:")
+    print(f"Total entries processed: {stats['total_files']}")
+    print(f"PDF metadata updated: {stats['metadata_written']}")
+    print(f"Files renamed: {stats['files_renamed']}")
+    print(f"Encrypted files skipped: {stats['encrypted_files']}")
     print(f"Errors encountered: {len(errors)}")
 
 if __name__ == "__main__":
